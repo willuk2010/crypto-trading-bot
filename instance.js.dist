@@ -22,6 +22,9 @@ x.forEach((pair) => {
                 }
             },
             {
+                'strategy': 'obv_pump_dump'
+            },
+            {
                 'strategy': 'macd',
                 'options': {
                     'period': '1h'
@@ -31,6 +34,63 @@ x.forEach((pair) => {
     })
 })
 
+// bitmex
+let y = [
+    'ADAZ18', 'TRXZ18', 'XRPZ18'
+]
 
+y.forEach((pair) => {
+    c.symbols.push({
+        'symbol': pair,
+        'periods': ['1m', '15m', '1h'],
+        'exchange': 'bitmex',
+        'state': 'watch',
+        'strategies': [
+            {
+                'strategy': 'cci',
+                'options': {
+                    'period': '15m'
+                }
+            },
+            {
+                'strategy': 'obv_pump_dump'
+            },
+            {
+                'strategy': 'macd',
+                'options': {
+                    'period': '1h'
+                }
+            }
+        ]
+    })
+})
 
+let z = [
+    'XLMUSDT', 'BNBBTC', 'BNBUSDT'
+]
 
+z.forEach((pair) => {
+    c.symbols.push({
+        'symbol': pair,
+        'periods': ['1m', '15m', '1h'],
+        'exchange': 'binance',
+        'state': 'watch',
+        'strategies': [
+            {
+                'strategy': 'cci',
+                'options': {
+                    'period': '15m'
+                }
+            },
+            {
+                'strategy': 'obv_pump_dump'
+            },
+            {
+                'strategy': 'macd',
+                'options': {
+                    'period': '1h'
+                }
+            }
+        ]
+    })
+})
