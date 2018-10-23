@@ -17,6 +17,7 @@ let CreateOrderListener = require('../modules/listener/create_order_listener')
 let CandleStickLogListener = require('../modules/listener/candle_stick_log_listener')
 let TickerDatabaseListener = require('../modules/listener/ticker_database_listener')
 let TickerLogListener = require('../modules/listener/ticker_log_listener')
+let ExchangeOrderWatchdogListener = require('../modules/listener/exchange_order_watchdog_listener')
 
 let SignalLogger = require('../modules/signal/signal_logger')
 let SignalHttp = require('../modules/signal/signal_http')
@@ -25,14 +26,18 @@ let SignalListener = require('../modules/signal/signal_listener')
 let SignalRepository = require('../modules/repository/signal_repository')
 let CandlestickRepository = require('../modules/repository/candlestick_repository')
 let StrategyManager = require('./strategy/strategy_manager')
+let ExchangeManager = require('./exchange/exchange_manager')
 
 let Bitfinex = require('../exchange/bitfinex')
 let Bitmex = require('../exchange/bitmex')
 let Binance = require('../exchange/binance')
+let CoinbasePro = require('../exchange/coinbase_pro')
 
 let Trade = require('../modules/trade')
 let Http = require('../modules/http')
 let Backtest = require('../modules/backtest')
+
+let StopLossCalculator = require('../modules/order/stop_loss_calculator')
 
 var _ = require('lodash');
 
@@ -51,6 +56,7 @@ let tickerDatabaseListener = undefined
 let tickerLogListener = undefined
 let tickListener = undefined
 let createOrderListener = undefined
+let exchangeOrderWatchdogListener = undefined
 
 let signalLogger = undefined
 let signalHttp = undefined
@@ -59,10 +65,12 @@ let signalListener = undefined
 let signalRepository = undefined
 let candlestickRepository = undefined
 
-let exchanges = undefined
+let exchangeManager = undefined
 let backtest = undefined
 
 var strategyManager = undefined
+
+var stopLossCalculator = undefined
 
 module.exports = {
     boot: function() {
@@ -70,7 +78,7 @@ module.exports = {
         config = JSON.parse(fs.readFileSync('./conf.json', 'utf8'))
 
         this.getDatabase()
-        this.getExchangeInstances()
+        this.getExchangeManager().init()
     },
 
     getDatabase: () => {
@@ -105,6 +113,14 @@ module.exports = {
         )
     },
 
+    getStopLossCalculator: function() {
+        if (stopLossCalculator) {
+            return stopLossCalculator
+        }
+
+        return stopLossCalculator = new StopLossCalculator(this.getTickers(), this.getLogger())
+    },
+
     getCandleStickListener: function() {
         if (candleStickListener) {
             return candleStickListener;
@@ -118,7 +134,7 @@ module.exports = {
             return createOrderListener;
         }
 
-        return createOrderListener = new CreateOrderListener(this.getExchangeInstances(), this.getLogger())
+        return createOrderListener = new CreateOrderListener(this.getExchangeManager(), this.getLogger())
     },
 
     getTickListener: function() {
@@ -132,6 +148,19 @@ module.exports = {
             this.getNotifier(),
             this.getSignalLogger(),
             this.getStrategyManager()
+        )
+    },
+
+    getExchangeOrderWatchdogListener: function() {
+        if (exchangeOrderWatchdogListener) {
+            return exchangeOrderWatchdogListener
+        }
+
+        return exchangeOrderWatchdogListener = new ExchangeOrderWatchdogListener(
+            this.getExchangeManager(),
+            this.getInstances(),
+            this.getStopLossCalculator(),
+            this.getLogger(),
         )
     },
 
@@ -268,47 +297,21 @@ module.exports = {
             this.getTa(),
             this.getSignalHttp(),
             this.getBacktest(),
+            this.getExchangeManager()
         )
     },
 
-    getExchangeInstances: function() {
-        if (exchanges) {
-            return exchanges;
+    getExchangeManager: function() {
+        if (exchangeManager) {
+            return exchangeManager;
         }
 
-        let eventEmitter = this.getEventEmitter()
-
-        let myExchanges = {}
-
-        let instances = this.getInstances();
-        let config = this.getConfig();
-
-        let bitmex = instances.symbols.filter((symbol) => {
-            return symbol['exchange'] === 'bitmex' && symbol['state'] === 'watch';
-        });
-
-        if(bitmex.length > 0) {
-            myExchanges['bitmex'] = new Bitmex(eventEmitter, bitmex, this.getLogger());
-        }
-
-        let bitfinex = instances.symbols.filter((symbol) => {
-            return symbol['exchange'] === 'bitfinex' && symbol['state'] === 'watch';
-        });
-
-        if(bitfinex.length > 0) {
-            myExchanges['bitfinex'] = new Bitfinex(eventEmitter, config.exchanges.bitfinex, bitfinex, this.getLogger());
-        }
-
-        let binance = instances.symbols.filter((symbol) => {
-            return symbol['exchange'] === 'binance' && symbol['state'] === 'watch';
-        })
-
-
-        if(binance.length > 0) {
-            myExchanges['binance'] = new Binance(eventEmitter, config.exchanges.binance || {}, binance, this.getLogger());
-        }
-
-        return exchanges = myExchanges
+        return exchangeManager = new ExchangeManager(
+            this.getEventEmitter(),
+            this.getLogger(),
+            this.getInstances(),
+            this.getConfig(),
+        )
     },
 
     createTradeInstance: function() {
@@ -324,7 +327,8 @@ module.exports = {
             this.getCandleStickLogListener(),
             this.getTickerDatabaseListener(),
             this.getTickerLogListener(),
-            this.getSignalListener()
+            this.getSignalListener(),
+            this.getExchangeOrderWatchdogListener(),
         )
     },
 

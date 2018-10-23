@@ -3,11 +3,12 @@
 let express = require('express')
 
 module.exports = class Http {
-    constructor(config, ta, signalHttp, backtest) {
+    constructor(config, ta, signalHttp, backtest, exchangeManager) {
         this.config = config
         this.ta = ta
         this.signalHttp = signalHttp
         this.backtest = backtest
+        this.exchangeManager = exchangeManager
     }
 
     start() {
@@ -39,14 +40,14 @@ module.exports = class Http {
             ta.getTaForPeriods(periods).then((result) => {
                 res.render('../templates/base.html.twig', result);
             })
-        });
+        })
 
         app.get('/backtest', async (req, res) => {
             res.render('../templates/backtest.html.twig', {
                 'strategies': this.backtest.getBacktestStrategies(),
                 'pairs': this.backtest.getBacktestPairs(),
-            });
-        });
+            })
+        })
 
         app.post('/backtest/submit', async (req, res) => {
             let pair = req.body.pair.split('.')
@@ -58,21 +59,52 @@ module.exports = class Http {
                 pair[0],
                 pair[1],
                 req.body.options ? JSON.parse(req.body.options) : {}
-            ));
-        });
+            ))
+        })
 
         app.get('/tradingview/:symbol', (req, res) => {
             res.render('../templates/tradingview.html.twig', {
                 symbol: req.params.symbol,
-            });
-        });
+            })
+        })
 
         app.get('/signals', async (req, res) => {
             res.render('../templates/signals.html.twig', {
                 signals: await this.signalHttp.getSignals(Math.floor(Date.now() / 1000) - (60 * 60 * 48)),
-            });
-        });
+            })
+        })
 
+        let exchangeManager = this.exchangeManager
+        app.get('/trades', async (req, res) => {
+            let positions = []
+            let orders = []
+
+            let exchanges = exchangeManager.all();
+            for (let key in exchanges) {
+                let exchange = exchanges[key]
+
+                let myPositions = await exchange.getPositions()
+                myPositions.forEach(position => {
+                    positions.push({
+                        'exchange': exchange.getName(),
+                        'position': position,
+                    })
+                })
+
+                let myOrders = await exchange.getOrders()
+                myOrders.forEach(order => {
+                    orders.push({
+                        'exchange': exchange.getName(),
+                        'order': order,
+                    })
+                })
+            }
+
+            res.render('../templates/trades.html.twig', {
+                'orders': orders,
+                'positions': positions.sort((a,b) => a.createdAt.getTime() - b.createdAt.getTime()),
+            })
+        })
 
         let port = this.config.webserver.port || 8080;
 
@@ -80,4 +112,4 @@ module.exports = class Http {
 
         console.log('Webserver listening on: ' + port)
     }
-};
+}
